@@ -76,11 +76,6 @@ func (g *Gateway) Close() error {
 	g.mu.RLock()
 	g.clearPort(g.myAddr.Port())
 	g.mu.RUnlock()
-	// Close the logger. The logger should be the last thing to shut down so that
-	// all other objects have access to logging while closing.
-	if err := g.log.Close(); err != nil {
-		errs = append(errs, fmt.Errorf("log.Close failed: %v", err))
-	}
 
 	return build.JoinErrors(errs, "; ")
 }
@@ -111,6 +106,14 @@ func New(addr string, persistDir string) (g *Gateway, err error) {
 	if err != nil {
 		return nil, err
 	}
+	g.threads.AfterStop(func() {
+		err = g.log.Close()
+		if err != nil {
+			// State of the logger is uncertain, a Println will have to
+			// suffice.
+			fmt.Println("Error when closing the gateway logger:", err)
+		}
+	})
 
 	// Register RPCs.
 	g.RegisterRPC("ShareNodes", g.shareNodes)
