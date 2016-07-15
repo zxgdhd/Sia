@@ -98,9 +98,6 @@ func New(addr string, persistDir string) (g *Gateway, err error) {
 	g.RegisterRPC("ShareNodes", g.shareNodes)
 	g.RegisterConnectCall("ShareNodes", g.requestNodes)
 	g.threads.OnStop(func() {
-		g.mu.Lock()
-		defer g.mu.Unlock()
-
 		g.UnregisterRPC("ShareNodes")
 		g.UnregisterConnectCall("ShareNodes")
 	})

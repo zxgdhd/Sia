@@ -69,7 +69,13 @@ func (h *Host) initNetworking(address string) (err error) {
 	// Non-blocking, perform port forwarding and create the hostname discovery
 	// thread.
 	go func() {
-		err := h.managedForwardPort()
+		err := h.tg.Add()
+		if err != nil {
+			return
+		}
+		defer h.tg.Done()
+
+		err = h.managedForwardPort()
 		if err != nil {
 			h.log.Println("ERROR: failed to forward port:", err)
 		}
