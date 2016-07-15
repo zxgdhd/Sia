@@ -61,12 +61,6 @@ func (g *Gateway) Close() error {
 	}
 
 	var errs []error
-	// Unregister RPCs. Not strictly necessary for clean shutdown in this specific
-	// case, as the handlers should only contain references to the gateway itself,
-	// but do it anyways as an example for other modules to follow.
-	g.UnregisterRPC("ShareNodes")
-	g.UnregisterConnectCall("ShareNodes")
-	// save the latest gateway state
 	g.mu.RLock()
 	if err := g.saveSync(); err != nil {
 		errs = append(errs, fmt.Errorf("save failed: %v", err))
@@ -118,6 +112,13 @@ func New(addr string, persistDir string) (g *Gateway, err error) {
 	// Register RPCs.
 	g.RegisterRPC("ShareNodes", g.shareNodes)
 	g.RegisterConnectCall("ShareNodes", g.requestNodes)
+	g.threads.OnStop(func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+
+		g.UnregisterRPC("ShareNodes")
+		g.UnregisterConnectCall("ShareNodes")
+	})
 
 	// Load the old node list. If it doesn't exist, no problem, but if it does,
 	// we want to know about any errors preventing us from loading it.
