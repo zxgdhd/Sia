@@ -250,7 +250,7 @@ func newHost(dependencies dependencies, cs modules.ConsensusSet, tpool modules.T
 		if err != nil {
 			// State of the logger is uncertain, a Println will have to
 			// suffice.
-			fmt.Println("Error when closing the logger:", err)
+			fmt.Println("Error when closing the host logger:", err)
 		}
 	})
 
