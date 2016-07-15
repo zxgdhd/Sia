@@ -56,17 +56,7 @@ func (g *Gateway) Address() modules.NetAddress {
 
 // Close saves the state of the Gateway and stops its listener process.
 func (g *Gateway) Close() error {
-	if err := g.threads.Stop(); err != nil {
-		return err
-	}
-
-	var errs []error
-	// clear the port mapping (no effect if UPnP not supported)
-	g.mu.RLock()
-	g.clearPort(g.myAddr.Port())
-	g.mu.RUnlock()
-
-	return build.JoinErrors(errs, "; ")
+	return g.threads.Stop()
 }
 
 // Flush will block until all of the gateway's current processes have finished.
@@ -146,6 +136,7 @@ func New(addr string, persistDir string) (g *Gateway, err error) {
 	if err != nil {
 		return
 	}
+
 	// Automatically close the listener when g.threads.Stop() is called.
 	g.threads.OnStop(func() {
 		err := g.listener.Close()
@@ -166,7 +157,18 @@ func New(addr string, persistDir string) (g *Gateway, err error) {
 	g.log.Println("INFO: gateway created, started logging")
 
 	// Forward the RPC port, if possible.
-	go g.threadedForwardPort(g.port)
+	go func() {
+		if g.threads.Add() != nil {
+			return
+		}
+		defer g.threads.Done()
+
+		g.managedForwardPort(g.port)
+		g.threads.OnStop(func() {
+			g.managedClearPort(g.myAddr.Port())
+		})
+	}()
+
 	// Learn our external IP.
 	go g.threadedLearnHostname()
 

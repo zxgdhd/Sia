@@ -84,13 +84,8 @@ func (g *Gateway) threadedLearnHostname() {
 	g.log.Println("INFO: our address is", addr)
 }
 
-// threadedForwardPort adds a port mapping to the router.
-func (g *Gateway) threadedForwardPort(port string) {
-	if err := g.threads.Add(); err != nil {
-		return
-	}
-	defer g.threads.Done()
-
+// managedForwardPort adds a port mapping to the router.
+func (g *Gateway) managedForwardPort(port string) {
 	if build.Release == "testing" {
 		return
 	}
@@ -107,12 +102,11 @@ func (g *Gateway) threadedForwardPort(port string) {
 		g.log.Printf("WARN: could not automatically forward port %s: %v", port, err)
 		return
 	}
-
 	g.log.Println("INFO: successfully forwarded port", port)
 }
 
-// clearPort removes a port mapping from the router.
-func (g *Gateway) clearPort(port string) {
+// managedClearPort removes a port mapping from the router.
+func (g *Gateway) managedClearPort(port string) {
 	if build.Release == "testing" {
 		return
 	}
@@ -129,6 +123,5 @@ func (g *Gateway) clearPort(port string) {
 		g.log.Printf("WARN: could not automatically unforward port %s: %v", port, err)
 		return
 	}
-
 	g.log.Println("INFO: successfully unforwarded port", port)
 }
