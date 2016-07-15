@@ -1,22 +1,23 @@
 package api
 
-// ecosystem_test.go provides tooling and tests for whole-ecosystem testing,
-// consisting of multiple full, non-state-sharing nodes connected in various
-// arrangements and performing various full-ecosystem tasks.
+// nodering_test.go has some tests that use a ring of nodes. The ring is
+// represented by an array of serverTesters. All helper functions assume that
+// the first element of the array has the lastest change that has been made,
+// and assume that the first element is connection to the second, the second to
+// the third, etc, and that the last node is connecte to the first.
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/NebulousLabs/Sia/types"
 )
 
-// synchronizationCheck takes a bunch of server testers as input and checks
-// that they all have the same current block as the first server tester. The
-// first server tester needs to have the most recent block in order for the
-// check to work.
-func synchronizationCheck(sts []*serverTester) (types.BlockID, error) {
+// ringSynchronizationCheck checks that every node in the node ring has the
+// most recent block.
+func ringSynchronizationCheck(sts []*serverTester) (types.BlockID, error) {
 	// Prefer returning an error in the event of a zero-length server tester -
 	// an error should be returned if the developer accidentally uses a nil
 	// slice instead of whatever value was intended, and there's no reason to
@@ -25,28 +26,36 @@ func synchronizationCheck(sts []*serverTester) (types.BlockID, error) {
 		return types.BlockID{}, errors.New("no server testers provided")
 	}
 
+	// Fetch the current block ID of the leader node.
 	var cg ConsensusGET
 	err := sts[0].getAPI("/consensus", &cg)
 	if err != nil {
 		return types.BlockID{}, err
 	}
 	leaderBlockID := cg.CurrentBlock
+
 	for i := range sts {
-		// Spin until the current block matches the leader block.
-		success := false
-		for j := 0; j < 100; j++ {
-			err = sts[i].getAPI("/consensus", &cg)
-			if err != nil {
-				return types.BlockID{}, err
-			}
-			if cg.CurrentBlock == leaderBlockID {
-				success = true
-				break
-			}
-			time.Sleep(time.Millisecond * 100)
+		// Check that the current node has the latest block.
+		err = sts[i].getAPI("/consensus", &cg)
+		if err != nil {
+			return types.BlockID{}, err
 		}
-		if !success {
-			return types.BlockID{}, errors.New("synchronization check failed - nodes do not seem to be synchronized")
+		if cg.CurrentBlock != leaderBlockID {
+			return types.BlockID{}, fmt.Errorf("synchronization failed at node %v", i)
+		}
+
+		// Flush the current node's consensus set to guarantee that broadcast has
+		// been called on the most recent block.
+		err = sts[i].cs.Flush()
+		if err != nil {
+			return types.BlockID{}, err
+		}
+		// Flush the current node's gateway to guarantee that the broadcast call
+		// sent to the gateway has completed, sending the block to the next
+		// consenuss set.
+		err = sts[i].gateway.Flush()
+		if err != nil {
+			return types.BlockID{}, err
 		}
 	}
 	return leaderBlockID, nil
@@ -160,7 +169,7 @@ func TestHostPoorConnectivity(t *testing.T) {
 	// Connectivity check - all nodes should be synchronized to the leader's
 	// chain, which should have been the longest.
 	allTesters := []*serverTester{stLeader, stHost1, stHost2, stHost3, stHost4, stRenter1, stRenter2}
-	chainTip, err := synchronizationCheck(allTesters)
+	chainTip, err := ringSynchronizationCheck(allTesters)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +229,7 @@ func TestHostPoorConnectivity(t *testing.T) {
 	}
 
 	// Make sure that everyone has the most recent block.
-	_, err = synchronizationCheck(allTesters)
+	_, err = ringSynchronizationCheck(allTesters)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +242,7 @@ func TestHostPoorConnectivity(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	_, err = synchronizationCheck(allTesters)
+	_, err = ringSynchronizationCheck(allTesters)
 	if err != nil {
 		t.Fatal(err)
 	}
