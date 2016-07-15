@@ -85,6 +85,11 @@ func (g *Gateway) Close() error {
 	return build.JoinErrors(errs, "; ")
 }
 
+// Flush will block until all of the gateway's current processes have finished.
+func (g *Gateway) Flush() error {
+	return g.threads.Flush()
+}
+
 // New returns an initialized Gateway.
 func New(addr string, persistDir string) (g *Gateway, err error) {
 	// Create the directory if it doesn't exist.

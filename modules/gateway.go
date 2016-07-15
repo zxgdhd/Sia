@@ -104,5 +104,9 @@ type (
 
 		// Close safely stops the Gateway's listener process.
 		Close() error
+
+		// Flush will block until all of the gateway's current processes have
+		// finished.
+		Flush() error
 	}
 )
