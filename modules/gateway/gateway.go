@@ -61,11 +61,6 @@ func (g *Gateway) Close() error {
 	}
 
 	var errs []error
-	g.mu.RLock()
-	if err := g.saveSync(); err != nil {
-		errs = append(errs, fmt.Errorf("save failed: %v", err))
-	}
-	g.mu.RUnlock()
 	// clear the port mapping (no effect if UPnP not supported)
 	g.mu.RLock()
 	g.clearPort(g.myAddr.Port())
@@ -125,6 +120,14 @@ func New(addr string, persistDir string) (g *Gateway, err error) {
 	if loadErr := g.load(); loadErr != nil && !os.IsNotExist(loadErr) {
 		return nil, loadErr
 	}
+	g.threads.AfterStop(func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		err = g.saveSync()
+		if err != nil {
+			g.log.Println("Error saving gateway data on shutdown:", err)
+		}
+	})
 
 	// Add the bootstrap peers to the node list.
 	if build.Release == "standard" {
