@@ -19,6 +19,14 @@ func RandIntn(n int) (int, error) {
 	return int(r.Int64()), err
 }
 
+// RandUint64N returns a random uint64 in the range [0,n).
+func RandUint64N(n uint64) (uint64, error) {
+	bigN := new(big.Int)
+	bigN.SetUint64(n)
+	r, err := rand.Int(rand.Reader, bigN)
+	return r.Uint64(), err
+}
+
 // Perm returns, as a slice of n ints, a random permutation of the integers
 // [0,n).
 func Perm(n int) ([]int, error) {

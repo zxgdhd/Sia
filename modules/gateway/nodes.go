@@ -12,7 +12,7 @@ import (
 
 const (
 	maxSharedNodes = 10
-	minPeers       = 3
+	minPeers       = 3 // TODO: what was this used for? Nothing uses it now.
 )
 
 var (
@@ -47,7 +47,9 @@ func (g *Gateway) randomNode() (modules.NetAddress, error) {
 	if len(g.nodes) > 0 {
 		r, _ := crypto.RandIntn(len(g.nodes))
 		for node := range g.nodes {
-			if r <= 0 {
+			_, alreadyConnected := g.peers[node]
+			_, ourAddr := g.ourAddrs[node]
+			if !alreadyConnected && !ourAddr && r <= 0 {
 				return node, nil
 			}
 			r--

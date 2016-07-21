@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/NebulousLabs/Sia/build"
+	//"github.com/NebulousLabs/Sia/build"
 )
 
 // MaxEncodedNetAddressLength is the maximum length of a NetAddress encoded
@@ -81,12 +81,14 @@ func (na NetAddress) IsValid() error {
 
 	// This check must come after the valid port check so that a host such as
 	// "localhost:badport" will fail.
+	/*
 	if na.IsLoopback() {
 		if build.Release == "testing" {
 			return nil
 		}
 		return errors.New("host is a loopback address")
 	}
+	*/
 
 	// First try to parse host as an IP address; if that fails, assume it is a
 	// hostname.

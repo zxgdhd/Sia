@@ -21,9 +21,10 @@ var (
 
 // Gateway implements the modules.Gateway interface.
 type Gateway struct {
-	listener net.Listener
-	myAddr   modules.NetAddress
-	port     string
+	listener   net.Listener
+	myAddr     modules.NetAddress
+	port       string
+	noncesSent map[uint64]struct{}
 
 	// handlers are the RPCs that the Gateway can handle.
 	handlers map[rpcID]modules.RPCFunc
@@ -36,6 +37,12 @@ type Gateway struct {
 	// nodes is the set of all known nodes (i.e. potential peers) on the
 	// network.
 	nodes map[modules.NetAddress]struct{}
+
+	// ourAddrs is a set of addresses that lead back to us. The addresses
+	// are stored so that we do not repeatedly attempt to connect to
+	// ourselves. Some of these addresses may not be reachable from outside
+	// the local network.
+	ourAddrs map[modules.NetAddress]struct{}
 
 	// threads is used to signal the Gateway's goroutines to shut down and to wait
 	// for all goroutines to exit before returning from Close().
@@ -98,6 +105,8 @@ func New(addr string, persistDir string) (g *Gateway, err error) {
 		initRPCs:   make(map[string]modules.RPCFunc),
 		peers:      make(map[modules.NetAddress]*peer),
 		nodes:      make(map[modules.NetAddress]struct{}),
+		noncesSent: make(map[uint64]struct{}),
+		ourAddrs:   make(map[modules.NetAddress]struct{}),
 		persistDir: persistDir,
 	}
 

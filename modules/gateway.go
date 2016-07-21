@@ -10,7 +10,7 @@ const (
 	GatewayDir = "gateway"
 	// WellConnectedThreshold is the number of outbound connections at which the
 	// gateway will not attempt to make new outbound connections.
-	WellConnectedThreshold = 8
+	WellConnectedThreshold = 2
 )
 
 // TODO: Move this and its functionality into the gateway package.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"math"
 
 	"github.com/NebulousLabs/Sia/build"
 	"github.com/NebulousLabs/Sia/crypto"
@@ -182,8 +183,10 @@ func (g *Gateway) threadedAcceptConn(conn net.Conn) {
 
 	if build.VersionCmp(remoteVersion, "1.0.0") < 0 {
 		err = g.managedAcceptConnOldPeer(conn, remoteVersion)
-	} else {
+	} else if build.VersionCmp(remoteVersion, "1.0.1") < 0 {
 		err = g.managedAcceptConnNewPeer(conn, remoteVersion)
+	} else {
+		err = g.managedAcceptConn101Peer(conn, remoteVersion)
 	}
 	if err != nil {
 		g.log.Debugf("INFO: %v wanted to connect, but failed: %v", addr, err)
@@ -214,6 +217,17 @@ func (g *Gateway) managedAcceptConnOldPeer(conn net.Conn, remoteVersion string) 
 	})
 
 	return nil
+}
+
+// managedAcceptConn101Peer accepts connection requests from peers >= v1.0.1.
+// The requesting peer is added as a node and a peer. The peer is only added if
+// a nil error is returned.
+func (g *Gateway) managedAcceptConn101Peer(conn net.Conn, remoteVersion string) error {
+	err := g.managedAcceptConnNonceHandshake(conn)
+	if err != nil {
+		return err
+	}
+	return g.managedAcceptConnNewPeer(conn, remoteVersion)
 }
 
 // managedAcceptConnNewPeer accepts connection requests from peers >= v1.0.0.
@@ -406,6 +420,72 @@ func (g *Gateway) managedConnectOldPeer(conn net.Conn, remoteVersion string, rem
 	return nil
 }
 
+func (g *Gateway) managedConnectNonceHandshake(conn net.Conn) error {
+	nonce, err := crypto.RandUint64N(math.MaxUint64)
+	if err != nil {
+		return fmt.Errorf("generating nonce failed: %v", err)
+	}
+	g.mu.Lock()
+	g.noncesSent[nonce] = struct{}{}
+	g.mu.Unlock()
+	if err := encoding.WriteObject(conn, nonce); err != nil {
+		return fmt.Errorf("writing nonce failed: %v", err)
+	}
+
+	if err := encoding.ReadObject(conn, &nonce, 8); err != nil {
+		return fmt.Errorf("reading nonce failed: %v", err)
+	}
+	g.mu.RLock()
+	_, nonceSeen := g.noncesSent[nonce]
+	g.mu.RUnlock()
+
+	if nonceSeen {
+		return errOurAddress
+	}
+	return nil
+}
+
+func (g *Gateway) managedAcceptConnNonceHandshake(conn net.Conn) error {
+	var nonce uint64
+	if err := encoding.ReadObject(conn, &nonce, 8); err != nil {
+		return fmt.Errorf("reading nonce failed: %v", err)
+	}
+	g.mu.RLock()
+	_, nonceSeen := g.noncesSent[nonce]
+	g.mu.RUnlock()
+
+	nonce, err := crypto.RandUint64N(math.MaxUint64)
+	if err != nil {
+		return fmt.Errorf("generating nonce failed: %v", err)
+	}
+	g.mu.Lock()
+	g.noncesSent[nonce] = struct{}{}
+	g.mu.Unlock()
+	if err := encoding.WriteObject(conn, nonce); err != nil {
+		return fmt.Errorf("writing nonce failed: %v", err)
+	}
+
+	if nonceSeen {
+		return errOurAddress
+	}
+	return nil
+}
+
+// managedConnect101Peer connects to peers >= v1.0.1. The peer is added as a
+// node and a peer. The peer is only added if a nil error is returned.
+func (g *Gateway) managedConnect101Peer(conn net.Conn, remoteVersion string, remoteAddr modules.NetAddress) error {
+	err := g.managedConnectNonceHandshake(conn)
+	if err == errOurAddress {
+		g.mu.Lock()
+		g.ourAddrs[remoteAddr] = struct{}{}
+		g.mu.Unlock()
+	}
+	if err != nil {
+		return err
+	}
+	return g.managedConnectNewPeer(conn, remoteVersion, remoteAddr)
+}
+
 // managedConnectNewPeer connects to peers >= v1.0.0. The peer is added as a
 // node and a peer. The peer is only added if a nil error is returned.
 func (g *Gateway) managedConnectNewPeer(conn net.Conn, remoteVersion string, remoteAddr modules.NetAddress) error {
@@ -450,7 +530,7 @@ func (g *Gateway) Connect(addr modules.NetAddress) error {
 	}
 	defer g.threads.Done()
 
-	if addr == g.Address() {
+	if _, exists := g.ourAddrs[addr]; exists || addr == g.Address() {
 		return errors.New("can't connect to our own address")
 	}
 	if err := addr.IsValid(); err != nil {
@@ -479,8 +559,10 @@ func (g *Gateway) Connect(addr modules.NetAddress) error {
 
 	if build.VersionCmp(remoteVersion, "1.0.0") < 0 {
 		err = g.managedConnectOldPeer(conn, remoteVersion, addr)
-	} else {
+	} else if build.VersionCmp(remoteVersion, "1.0.1") < 0 {
 		err = g.managedConnectNewPeer(conn, remoteVersion, addr)
+	} else {
+		err = g.managedConnect101Peer(conn, remoteVersion, addr)
 	}
 	if err != nil {
 		conn.Close()
@@ -574,6 +656,17 @@ func (g *Gateway) threadedPeerManager() {
 				defer g.threads.Done()
 
 				connectErr := g.Connect(addr)
+				/*
+				// Remove the node from the node list if it is our address.
+				if connectErr == errOurAddress {
+					g.mu.Lock()
+					g.removeNode(addr)
+					g.save()
+					g.mu.Unlock()
+					g.log.Debugf("INFO: removing node %q because it is us", addr)
+					connectErr = nil
+				}
+				*/
 				if connectErr != nil {
 					g.log.Debugln("WARN: automatic connect failed:", connectErr)
 				}

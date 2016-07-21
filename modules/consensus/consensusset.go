@@ -131,6 +131,7 @@ func New(gateway modules.Gateway, persistDir string) (*ConsensusSet, error) {
 	}
 
 	go func() {
+		gateway.RegisterRPC("SendBlocks", cs.rpcSendBlocks)
 		// Sync with the network. Don't sync if we are testing because typically we
 		// don't have any mock peers to synchronize with in testing.
 		// TODO: figure out a better way to conditionally do IBD. Otherwise this block will never be tested.
@@ -139,7 +140,6 @@ func New(gateway modules.Gateway, persistDir string) (*ConsensusSet, error) {
 		}
 
 		// Register RPCs
-		gateway.RegisterRPC("SendBlocks", cs.rpcSendBlocks)
 		gateway.RegisterRPC("RelayBlock", cs.rpcRelayBlock) // COMPATv0.5.1
 		gateway.RegisterRPC("RelayHeader", cs.rpcRelayHeader)
 		gateway.RegisterRPC("SendBlk", cs.rpcSendBlk)
