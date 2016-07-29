@@ -228,20 +228,11 @@ func (h *Host) managedFinalizeContract(builder modules.TransactionBuilder, rente
 		RevisionTransactionSet: []types.Transaction{revisionTransaction},
 	}
 
-	// Get a lock on the storage obligation.
-	lockErr := h.managedTryLockStorageObligation(so.id())
-	if lockErr != nil {
-		return nil, types.TransactionSignature{}, lockErr
-	}
-
 	// addStorageObligation will submit the transaction to the transaction
 	// pool, and will only do so if there was not some error in creating the
 	// storage obligation. If the transaction pool returns a consensus
 	// conflict, wait 30 seconds and try again.
 	err = func() error {
-		// Unlock the storage obligation when finished.
-		defer h.managedUnlockStorageObligation(so.id())
-
 		// Try adding the storage obligation. If there's an error, wait a few
 		// seconds and try again. Eventually time out. It should be noted that
 		// the storage obligation locking is both crappy and incomplete, and
